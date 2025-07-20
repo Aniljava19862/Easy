@@ -17,9 +17,10 @@ import java.io.IOException;
 @Component
 public class JwtRequestFilter extends OncePerRequestFilter {
 
-    private final UserService userService;
-    private final JwtUtil jwtUtil;
+    private final UserService userService; // Injects your UserDetailsService
+    private final JwtUtil jwtUtil; // Injects your JWT utility service
 
+    // Use constructor injection for all dependencies
     public JwtRequestFilter(UserService userService, JwtUtil jwtUtil) {
         this.userService = userService;
         this.jwtUtil = jwtUtil;
@@ -39,19 +40,19 @@ public class JwtRequestFilter extends OncePerRequestFilter {
             try {
                 username = jwtUtil.extractUsername(jwt);
             } catch (Exception e) {
-                // Log error: token might be expired, malformed, etc.
-                logger.warn("JWT Token error: " + e.getMessage());
+                // Log exception, e.g., token expired, malformed, etc.
+                System.err.println("JWT error: " + e.getMessage());
+                // Consider sending 401/403 directly if you want to explicitly deny
+                // For now, let it continue to Spring Security's normal flow for handling.
             }
         }
 
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-
             UserDetails userDetails = this.userService.loadUserByUsername(username);
 
             if (jwtUtil.validateToken(jwt, userDetails)) {
-
-                UsernamePasswordAuthenticationToken usernamePasswordAuthenticationToken = new UsernamePasswordAuthenticationToken(
-                        userDetails, null, userDetails.getAuthorities());
+                UsernamePasswordAuthenticationToken usernamePasswordAuthenticationToken =
+                        new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
                 usernamePasswordAuthenticationToken
                         .setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(usernamePasswordAuthenticationToken);

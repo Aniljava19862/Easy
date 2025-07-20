@@ -1,4 +1,4 @@
-package com.easy.auth.workflow.model;
+/*package com.easy.auth.workflow.model;
 
 
 import jakarta.persistence.*;
@@ -22,3 +22,4 @@ public class WorkflowDefinition {
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }
+*/

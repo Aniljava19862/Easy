@@ -15,7 +15,7 @@ public class UiDesign {
     private Long id;
     private String name;
     private String description;
-    @Column(columnDefinition = "jsonb") // PostgreSQL specific JSONB type
+   // @Column(columnDefinition = "jsonb") // PostgreSQL specific JSONB type
     private String jsonDefinition; // Store JSON as String, let Jackson handle mapping
     private Long createdByUserId; // Link to User
     private LocalDateTime createdAt;
