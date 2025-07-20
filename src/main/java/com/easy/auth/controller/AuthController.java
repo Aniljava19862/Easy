@@ -18,7 +18,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/auth")
 public class AuthController {
-
     private final AuthenticationManager authenticationManager;
     private final JwtUtil jwtUtil;
     private final UserService userService;
@@ -33,7 +32,7 @@ public class AuthController {
     public ResponseEntity<?> register(@RequestBody Map<String, String> request) {
         String username = request.get("username");
         String password = request.get("password");
-        userService.registerUser(username, password);
+        //userService.registerUser(username, password);
         return ResponseEntity.ok("User registered successfully");
     }
 

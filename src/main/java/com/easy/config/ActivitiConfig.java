@@ -1,4 +1,4 @@
-package com.easy.config;
+/*package com.easy.config;
 
 import org.activiti.engine.ProcessEngineConfiguration;
 import org.activiti.engine.impl.cfg.ProcessEngineConfigurationImpl;
@@ -32,3 +32,4 @@ public class ActivitiConfig {
         return config;
     }
 }
+*/

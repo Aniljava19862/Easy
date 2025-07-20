@@ -1,4 +1,4 @@
-package com.easy.auth.workflow.controller;
+/*package com.easy.auth.workflow.controller;
 
 import com.easy.auth.workflow.model.WorkflowDefinition;
 import com.easy.auth.workflow.service.WorkflowService;
@@ -62,4 +62,4 @@ public class WorkflowController {
     // - Getting active tasks for a user
     // - Completing tasks
     // - Getting process instance history
-}
+}*/
