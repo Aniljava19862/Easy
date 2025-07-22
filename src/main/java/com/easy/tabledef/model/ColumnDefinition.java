@@ -1,32 +1,42 @@
 package com.easy.tabledef.model;
 
+import com.fasterxml.jackson.annotation.JsonBackReference; // Ensure this is imported
 import jakarta.persistence.*;
-import lombok.Data; // <<< ADD THIS LINE for Lombok
-import lombok.EqualsAndHashCode; // <<< ADD THIS LINE for Lombok
-import lombok.ToString; // <<< ADD THIS LINE for Lombok
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 
-@Entity // <<< ADD THIS LINE for JPA mapping
-@Table(name = "column_definition") // <<< ADD THIS LINE for JPA table name
-@Data // <<< ADD THIS LINE: Lombok will now generate getters/setters for all fields, including tableDefinition
-@EqualsAndHashCode(exclude = "tableDefinition") // Exclude the parent to prevent stack overflow
-@ToString(exclude = "tableDefinition") // Exclude the parent to prevent stack overflow
+@Entity
+@Table(name = "column_metadata",
+        uniqueConstraints = {
+                @UniqueConstraint(columnNames = {"table_definition_id", "column_name"})
+        })
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
 public class ColumnDefinition {
-    @Id // <<< ADD THIS LINE for primary key
-    @GeneratedValue(strategy = GenerationType.IDENTITY) // <<< ADD THIS LINE for auto-incrementing ID
-    private Long id; // <<< ADD THIS LINE for primary key
 
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "table_definition_id", nullable = false)
+    @JsonBackReference("tableDefinitionReference") // <--- KEY CHANGE: NAME MUST MATCH JsonManagedReference
+    private TableDefinition tableDefinition; // This field should NOT be in your JSON request for ColumnDefinition
+
+    @Column(name = "column_name", nullable = false)
     private String columnName;
+
+    @Column(name = "display_name")
     private String displayName;
-    private String columnType; // e.g., "Currency", "Text", "Number"
+
+    @Column(name = "column_type", nullable = false)
+    private String columnType; // e.g., "TEXT", "NUMBER", "DATE", "BOOLEAN", "CURRENCY"
+
+    @Column(name = "is_primary_key", nullable = false)
     private boolean isPrimaryKey;
+
+    @Column(name = "create_index", nullable = false)
     private boolean createIndex;
-
-    // Getters and Setters (Lombok's @Data will generate these if you remove manual ones)
-    // If you prefer to keep manual getters/setters, you must manually add:
-    // public TableDefinition getTableDefinition() { return tableDefinition; }
-    // public void setTableDefinition(TableDefinition tableDefinition) { this.tableDefinition = tableDefinition; }
-
-    @ManyToOne(fetch = FetchType.LAZY) // Many ColumnDefinitions map to One TableDefinition
-    @JoinColumn(name = "table_definition_id", nullable = false) // Foreign key column in 'column_definition' table
-    private TableDefinition tableDefinition; // <<< THIS FIELD WAS MISSING AND IS CRUCIAL FOR THE RELATIONSHIP
 }

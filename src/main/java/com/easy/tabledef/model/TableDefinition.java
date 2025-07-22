@@ -1,36 +1,79 @@
 package com.easy.tabledef.model;
 
+import com.fasterxml.jackson.annotation.JsonManagedReference; // Ensure this is imported
+import com.fasterxml.jackson.annotation.JsonInclude; // Add if you need it for serialization control
+import com.fasterxml.jackson.annotation.JsonSetter;   // Add if you need custom deserialization for finalTableName
+
 import jakarta.persistence.*;
 import lombok.Data;
-import lombok.EqualsAndHashCode;
-import lombok.ToString;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "table_metadata")
+@Table(name = "table_metadata",
+        uniqueConstraints = {
+                @UniqueConstraint(columnNames = {"table_name"}),
+                @UniqueConstraint(columnNames = {"final_table_name"})
+        })
 @Data
-@EqualsAndHashCode(exclude = "columns")
-@ToString(exclude = "columns")
+@NoArgsConstructor
+@AllArgsConstructor
 public class TableDefinition {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(unique = true, nullable = false)
-    private String tableName; // Logical name for the table definition
+    @Column(name = "table_name", nullable = false, unique = true)
+    private String tableName; // Logical name, e.g., "CustomerData"
+
+    @Column(name = "app_suffix")
+    private String appSuffix; // Suffix for physical table name, e.g., "_crm" or "_test"
+
+    @Column(name = "final_table_name", nullable = false, unique = true)
+    // Removed @JsonInclude/@JsonSetter if not explicitly needed for finalTableName input as discussed
+    private String finalTableName; // Physical table name, e.g., "customer_data_crm"
+
+    @Column(name = "description")
     private String description;
-    private Long createdByUserId;
+
+    @OneToMany(mappedBy = "tableDefinition", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @JsonManagedReference("tableDefinitionReference") // <--- KEY CHANGE: ADD A NAME HERE
+    private List<ColumnDefinition> columns;
+
+    @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
+
+    @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
-    @Column(unique = true, nullable = false) // Added finalTableName
-    private String finalTableName; // The actual name of the physical database table
+    @PrePersist
+    @PreUpdate
+    public void setTimestampsAndConvertNames() {
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
+        updatedAt = LocalDateTime.now();
 
-    private String appSuffix; // Added appSuffix
+        if (this.finalTableName == null || this.finalTableName.trim().isEmpty()) {
+            if (this.tableName != null && !this.tableName.trim().isEmpty()) {
+                String baseName = convertToSnakeCase(this.tableName);
+                this.finalTableName = baseName + (this.appSuffix != null && !this.appSuffix.trim().isEmpty() ? "_" + convertToSnakeCase(this.appSuffix) : "");
+            } else {
+                throw new IllegalArgumentException("Cannot generate finalTableName: tableName is missing.");
+            }
+        } else {
+            this.finalTableName = convertToSnakeCase(this.finalTableName);
+        }
+    }
 
-    @OneToMany(mappedBy = "tableDefinition", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<ColumnDefinition> columns = new ArrayList<>();
+    private String convertToSnakeCase(String name) {
+        if (name == null || name.isEmpty()) {
+            return name;
+        }
+        return name.replaceAll("([a-z0-9])([A-Z])", "$1_$2").toLowerCase();
+    }
 }
