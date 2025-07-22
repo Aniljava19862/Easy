@@ -1,10 +1,16 @@
 package com.easy.tabledef.repository;
 
 
-import com.easy.tabledef.model.TableMetadata;
+import com.easy.tabledef.model.TableDefinition;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+
 import java.util.Optional;
 
-public interface TableDefinitionRepository extends JpaRepository<TableMetadata, Long> {
-    Optional<TableMetadata> findByTableName(String tableName);
+@Repository
+public interface TableDefinitionRepository extends JpaRepository<TableDefinition, Long> {
+
+    Optional<TableDefinition> findByTableName(String tableName);
+
+    Optional<TableDefinition> findByFinalTableName(String finalTableName);
 }
