@@ -3,8 +3,8 @@ package com.easy.auth.dynamicdata.service;
 
 
 
-import com.easy.tabledef.model.TableMetadata;
-import com.easy.tabledef.service.TableDefinitionService;
+import com.easy.tabledef.model.TableDefinition;
+import com.easy.tabledef.service.TableCreationService;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -16,9 +16,9 @@ import java.util.stream.Collectors;
 public class DynamicDataService {
 
     private final JdbcTemplate jdbcTemplate;
-    private final TableDefinitionService tableDefinitionService; // To get table/column info
+    private final TableCreationService tableDefinitionService; // To get table/column info
 
-    public DynamicDataService(JdbcTemplate jdbcTemplate, TableDefinitionService tableDefinitionService) {
+    public DynamicDataService(JdbcTemplate jdbcTemplate, TableCreationService tableDefinitionService) {
         this.jdbcTemplate = jdbcTemplate;
         this.tableDefinitionService = tableDefinitionService;
     }
@@ -27,7 +27,7 @@ public class DynamicDataService {
 
     // Example: Create a new row in a dynamic table
     public Map<String, Object> createRow(String tableName, Map<String, Object> rowData) {
-        TableMetadata tableMetadata = tableDefinitionService.findByTableName(tableName)
+        TableDefinition tableMetadata = tableDefinitionService.getTableDefinitionByLogicalName(tableName)
                 .orElseThrow(() -> new IllegalArgumentException("Table not found: " + tableName));
 
         // Prepare SQL INSERT statement
