@@ -8,6 +8,7 @@ import org.springframework.util.Assert;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -63,17 +64,31 @@ public class DynamicTableAccessor {
      * @return The number of rows affected (should be 1 for a successful insert).
      * @throws IllegalArgumentException if the table name or data is invalid.
      */
+    /**
+     * Inserts data into a specified table.
+     * This method expects the 'data' map to already contain the 'system_row_id' if applicable.
+     *
+     * @param tableName The physical name of the table.
+     * @param data      A Map<String, Object> where keys are column names and values are the data.
+     * @return The number of rows affected.
+     */
     public int insert(String tableName, Map<String, Object> data) {
         String sanitizedTableName = sanitizeSqlIdentifier(tableName);
         Assert.notEmpty(data, "Data for insertion cannot be empty.");
 
         // Separate column names and their corresponding values
         List<String> columns = data.keySet().stream()
-                .map(this::sanitizeSqlIdentifier)
+                .map(this::sanitizeSqlIdentifier) // Sanitize column names
                 .collect(Collectors.toList());
+
+        // Create a list of values, ensuring their order matches the columns list.
+        // It's important to get values based on the order of the *original* unsanitized map keys
+        // or by mapping from the sanitized keys back to the original for lookup if your sanitize adds chars.
+        // The .replace("`", "") handles cases where sanitizeSqlIdentifier might add backticks.
         List<Object> values = columns.stream()
-                .map(c -> data.get(c.replaceAll("`", ""))) // Remove backticks if added by sanitize for map lookup
+                .map(sanitizedColName -> data.get(sanitizedColName.replaceAll("`", "")))
                 .collect(Collectors.toList());
+
 
         // Create placeholders for prepared statement (e.g., ?, ?, ?)
         String placeholders = String.join(", ", Collections.nCopies(columns.size(), "?"));
@@ -220,5 +235,25 @@ public class DynamicTableAccessor {
 
         System.out.println("Executing DELETE on " + sanitizedTableName + ": " + sql + " with value: " + filterValue);
         return jdbcTemplate.update(sql, filterValue);
+    }
+
+    // In src/main/java/com/easy/tabledef/util/DynamicTableAccessor.java
+// ... inside DynamicTableAccessor class ...
+
+    public Optional<Map<String, Object>> selectOne(String tableName, String keyColumn, Object keyValue) {
+        String sanitizedTableName = sanitizeSqlIdentifier(tableName);
+        String sanitizedKeyColumn = sanitizeSqlIdentifier(keyColumn);
+
+        String sql = String.format("SELECT * FROM %s WHERE %s = ?", sanitizedTableName, sanitizedKeyColumn);
+
+        try {
+            // queryForList is safer than queryForMap for single results, as it returns an empty list if no match
+            List<Map<String, Object>> result = jdbcTemplate.queryForList(sql, keyValue);
+            return result.isEmpty() ? Optional.empty() : Optional.of(result.get(0));
+        } catch (org.springframework.dao.DataAccessException e) {
+            // Catch more general DataAccessException for issues like column not found, etc.
+            System.err.println("Error selecting one from " + tableName + " by " + keyColumn + "=" + keyValue + ": " + e.getMessage());
+            throw new RuntimeException("Database error during select: " + e.getMessage(), e);
+        }
     }
 }

@@ -1,6 +1,7 @@
 package com.easy.tabledef.controller;
 
 import com.easy.tabledef.dto.TableDefinitionDto;
+import com.easy.tabledef.dto.TableRecordDto;
 import com.easy.tabledef.model.TableDefinition;
 import com.easy.tabledef.service.TableCreationService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -208,4 +209,37 @@ public class TableController {
         }
         return ResponseEntity.ok(tableDefinitions); // Return 200 OK with the list of tables
     }
+
+    // --- NEW ENDPOINT: Get Combined Table Definition and Single Row Data ---
+    /**
+     * Retrieves the definition and a single row of data for a dynamic table.
+     * This is useful for editing purposes where the frontend needs both schema and data.
+     * GET /tables/data/{logicalTableName}/record/{systemRowId}
+     *
+     * @param logicalTableName The logical name of the table.
+     * @param systemRowId      The system-generated UUID of the row to fetch.
+     * @return ResponseEntity with a TableRecordDto on success, or an error/404 message.
+     */
+    @GetMapping("/data/{logicalTableName}/record/{systemRowId}")
+    public ResponseEntity<?> getTableDefinitionAndSingleRecord(
+            @PathVariable String logicalTableName,
+            @PathVariable String systemRowId) {
+        try {
+            Optional<TableRecordDto> tableRecordDtoOptional =
+                    tableCreationService.getTableDefinitionAndSingleRow(logicalTableName, systemRowId);
+
+            if (tableRecordDtoOptional.isPresent()) {
+                return ResponseEntity.ok(tableRecordDtoOptional.get());
+            } else {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body("Row with system ID '" + systemRowId + "' not found in table '" + logicalTableName + "'.");
+            }
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body("Validation Error: " + e.getMessage());
+        } catch (RuntimeException e) {
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Server Error: " + e.getMessage());
+        }
+    }
+
 }
