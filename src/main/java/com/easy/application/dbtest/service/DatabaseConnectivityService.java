@@ -10,7 +10,7 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.HashMap;
-import java.util.List; // Import for List
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -83,45 +83,38 @@ public class DatabaseConnectivityService {
         }
     }
 
+    // Changed return type from String to DatabaseConnectionDetails
     @Transactional
-    public String saveConnectionDetails(DatabaseConnectionDetails details) {
+    public DatabaseConnectionDetails saveConnectionDetails(DatabaseConnectionDetails details) {
         String testResult = testConnectionDynamically(details);
         if (testResult.startsWith("FAILURE")) {
-            return "FAILURE: Cannot save invalid connection. Test failed: " + testResult.substring("FAILURE: ".length());
+            // Throw an exception for failed connection test
+            throw new IllegalArgumentException("Cannot save invalid connection. Test failed: " + testResult.substring("FAILURE: ".length()));
         }
 
         Optional<DatabaseConnectionDetails> existingConnection = repository.findByConnectionName(details.getConnectionName());
         if (existingConnection.isPresent()) {
-            return "FAILURE: A connection with the name '" + details.getConnectionName() + "' already exists. Please choose a different name.";
+            throw new IllegalArgumentException("A connection with the name '" + details.getConnectionName() + "' already exists. Please choose a different name.");
         }
 
-        try {
-            repository.save(details);
-            return "SUCCESS: Connection details for '" + details.getConnectionName() + "' saved successfully.";
-        } catch (Exception e) {
-            return "FAILURE: Could not save connection details for '" + details.getConnectionName() + "'. Error: " + e.getMessage();
-        }
+        // The @PrePersist method in DatabaseConnectionDetails will generate the UUID
+        return repository.save(details); // Returns the saved entity with the generated ID and UUID
     }
 
-    // --- NEW METHODS FOR RETRIEVAL ---
-
-    /**
-     * Retrieves all saved database connection details.
-     * @return A list of all DatabaseConnectionDetails.
-     */
-    @Transactional(readOnly = true) // Read-only transaction for better performance
+    @Transactional(readOnly = true)
     public List<DatabaseConnectionDetails> getAllSavedConnections() {
         return repository.findAll();
     }
 
-    /**
-     * Retrieves a specific saved database connection detail by its connection name.
-     * @param connectionName The unique name of the connection.
-     * @return An Optional containing the DatabaseConnectionDetails if found, or empty.
-     */
     @Transactional(readOnly = true)
     public Optional<DatabaseConnectionDetails> getSavedConnectionByName(String connectionName) {
         return repository.findByConnectionName(connectionName);
+    }
+
+    // --- NEW METHOD TO GET BY UUID ---
+    @Transactional(readOnly = true)
+    public Optional<DatabaseConnectionDetails> getSavedConnectionByUuid(String uuid) {
+        return repository.findByUuid(uuid);
     }
 
     private int getDefaultPort(String dbType) {
