@@ -1,93 +1,119 @@
-package com.easy.auth.dynamicdata.service;
+/*package com.easy.auth.dynamicdata.service;
 
-
-
-
-import com.easy.tabledef.model.TableDefinition;
 import com.easy.tabledef.service.TableCreationService;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
+import java.util.Optional; // Required for Optional return types
 
 @Service
 public class DynamicDataService {
 
-    private final JdbcTemplate jdbcTemplate;
-    private final TableCreationService tableDefinitionService; // To get table/column info
+    // You should *not* directly inject JdbcTemplate here for dynamic operations.
+    // Instead, rely on TableCreationService to provide the correct dynamic JdbcTemplate.
+    // private final JdbcTemplate jdbcTemplate; // REMOVE THIS LINE
 
-    public DynamicDataService(JdbcTemplate jdbcTemplate, TableCreationService tableDefinitionService) {
-        this.jdbcTemplate = jdbcTemplate;
-        this.tableDefinitionService = tableDefinitionService;
+    private final TableCreationService tableCreationService; // Corrected variable name
+
+    @Autowired // Use @Autowired for constructor injection
+    public DynamicDataService(TableCreationService tableCreationService) {
+        // No direct JdbcTemplate here
+        this.tableCreationService = tableCreationService;
     }
 
-    // --- CRUD for dynamic tables ---
+    // --- CRUD for dynamic tables, delegating to TableCreationService ---
 
-    // Example: Create a new row in a dynamic table
-    public Map<String, Object> createRow(String tableName, Map<String, Object> rowData) {
-        TableDefinition tableMetadata = tableDefinitionService.getTableDefinitionByLogicalName(tableName)
-                .orElseThrow(() -> new IllegalArgumentException("Table not found: " + tableName));
-
-        // Prepare SQL INSERT statement
-        String columns = rowData.keySet().stream().collect(Collectors.joining(", "));
-        String placeholders = rowData.keySet().stream().map(k -> "?").collect(Collectors.joining(", "));
-        String sql = String.format("INSERT INTO %s (%s) VALUES (%s)", tableName, columns, placeholders);
-
-        Object[] values = rowData.values().toArray();
-        jdbcTemplate.update(sql, values);
-
-        // In a real app, you'd want to return the newly created row with its ID
-        // This often requires a "RETURNING id" clause or a separate SELECT.
-        return rowData; // Placeholder return
+    /**
+     * Creates a new row in a dynamic table for a specific project.
+     * Delegates to TableCreationService.
+     *
+     * @param logicalTableName The logical name of the table.
+     * @param projectConfigId The UUID of the project.
+     * @param rowData A map of column names to their values for the new row.
+     * @return The map of rowData, including the generated system_row_id.
+     */
+   /* public Map<String, Object> createRow(String logicalTableName, String projectConfigId, Map<String, Object> rowData) {
+        // TableCreationService's addDataToDynamicTable already handles UUID generation
+        // and uses the correct dynamic JdbcTemplate via getJdbcTemplateForProject.
+        // It returns an int (rows affected), but we can adapt it to return the map.
+        // As addDataToDynamicTable modifies the input 'rowData' to add SYSTEM_UUID_COLUMN_NAME,
+        // we can simply return the modified rowData after the call.
+        tableCreationService.addDataToDynamicTable(logicalTableName, projectConfigId, rowData);
+        return rowData; // rowData now contains the system_row_id
     }
 
-    // Example: Read all rows from a dynamic table
-    public List<Map<String, Object>> getAllRows(String tableName) {
-        // Basic validation for table name to prevent SQL injection
-        if (!tableName.matches("^[a-zA-Z0-9_]+$")) {
-            throw new IllegalArgumentException("Invalid table name.");
-        }
-        String sql = "SELECT * FROM " + tableName;
-        return jdbcTemplate.queryForList(sql);
+    /**
+     * Retrieves all rows from a dynamic table for a specific project.
+     * Delegates to TableCreationService.
+     *
+     * @param logicalTableName The logical name of the table.
+     * @param projectConfigId The UUID of the project.
+     * @return A list of maps, where each map represents a row.
+     */
+   /* public List<Map<String, Object>> getAllRows(String logicalTableName, String projectConfigId) {
+        return tableCreationService.getAllDataFromDynamicTable(logicalTableName, projectConfigId);
     }
 
-    // Example: Read a single row by ID from a dynamic table
-    public Map<String, Object> getRowById(String tableName, Long id) {
-        // Need to know the primary key column name. Assume 'id' for simplicity.
-        // In a real system, you'd retrieve this from `ColumnMetadata`.
-        if (!tableName.matches("^[a-zA-Z0-9_]+$")) {
-            throw new IllegalArgumentException("Invalid table name.");
-        }
-        String sql = String.format("SELECT * FROM %s WHERE id = ?", tableName);
-        return jdbcTemplate.queryForMap(sql, id);
+    /**
+     * Retrieves a single row by its system_row_id from a dynamic table for a specific project.
+     * Delegates to TableCreationService.
+     *
+     * @param logicalTableName The logical name of the table.
+     * @param projectConfigId The UUID of the project.
+     * @param systemRowId The system-generated UUID of the row.
+     * @return An Optional containing the row data as a Map, or empty if not found.
+     */
+/**  public Optional<Map<String, Object>> getRowBySystemId(String logicalTableName, String projectConfigId, String systemRowId) {
+        // Renamed from getRowById to getRowBySystemId to match our architecture's primary key
+        return tableCreationService.getSingleRowBySystemIdFromDynamicTable(logicalTableName, projectConfigId, systemRowId);
     }
 
-    // Example: Update a row in a dynamic table
-    public void updateRow(String tableName, Long id, Map<String, Object> rowData) {
-        // Prepare SQL UPDATE statement
-        String setClause = rowData.keySet().stream()
-                .map(key -> key + " = ?")
-                .collect(Collectors.joining(", "));
-        String sql = String.format("UPDATE %s SET %s WHERE id = ?", tableName, setClause);
-
-        Object[] values = new Object[rowData.size() + 1];
-        int i = 0;
-        for (Object value : rowData.values()) {
-            values[i++] = value;
-        }
-        values[i] = id; // Last value is the ID for the WHERE clause
-
-        jdbcTemplate.update(sql, values);
+    /**
+     * Retrieves a single row by a custom filter column and value from a dynamic table for a specific project.
+     * Delegates to TableCreationService.
+     *
+     * @param logicalTableName The logical name of the table.
+     * @param projectConfigId The UUID of the project.
+     * @param filterColumn The column name to filter by.
+     * @param filterValue The value to match.
+     * @return An Optional containing the row data as a Map, or empty if not found.
+     */
+/** public Optional<Map<String, Object>> getRowByFilter(String logicalTableName, String projectConfigId, String filterColumn, Object filterValue) {
+        List<Map<String, Object>> results = tableCreationService.getFilteredDataFromDynamicTable(logicalTableName, projectConfigId, filterColumn, filterValue);
+        return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0)); // Return first match
     }
 
-    // Example: Delete a row from a dynamic table
-    public void deleteRow(String tableName, Long id) {
-        if (!tableName.matches("^[a-zA-Z0-9_]+$")) {
-            throw new IllegalArgumentException("Invalid table name.");
-        }
-        String sql = String.format("DELETE FROM %s WHERE id = ?", tableName);
-        jdbcTemplate.update(sql, id);
+    /**
+     * Updates a row in a dynamic table for a specific project.
+     * Delegates to TableCreationService.
+     *
+     * @param logicalTableName The logical name of the table.
+     * @param projectConfigId The UUID of the project.
+     * @param updateData A map of column names to new values.
+     * @param filterColumn The column to filter by for the update.
+     * @param filterValue The value to match for the update.
+     * @return The number of rows affected.
+     */
+/** public int updateRow(String logicalTableName, String projectConfigId, Map<String, Object> updateData, String filterColumn, Object filterValue) {
+        return tableCreationService.updateDataInDynamicTable(logicalTableName, projectConfigId, updateData, filterColumn, filterValue);
     }
-}
+
+    /**
+     * Deletes a row from a dynamic table for a specific project.
+     * Delegates to TableCreationService.
+     *
+     * @param logicalTableName The logical name of the table.
+     * @param projectConfigId The UUID of the project.
+     * @param filterColumn The column to filter by for deletion.
+     * @param filterValue The value to match for deletion.
+     * @return The number of rows affected.
+     */
+/**  public int deleteRow(String logicalTableName, String projectConfigId, String filterColumn, Object filterValue) {
+        return tableCreationService.deleteDataFromDynamicTable(logicalTableName, projectConfigId, filterColumn, filterValue);
+    }
+
+    // You can add more methods here if you need to expose other TableCreationService functionalities
+    // or combine them in specific ways for your application's logic.
+}*/

@@ -1,245 +1,231 @@
 package com.easy.tabledef.controller;
 
 import com.easy.tabledef.dto.TableDefinitionDto;
-import com.easy.tabledef.dto.TableRecordDto;
 import com.easy.tabledef.model.TableDefinition;
 import com.easy.tabledef.service.TableCreationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional; // Import Optional
+import java.util.Optional;
 
 @RestController
-@RequestMapping("/tables")
+@RequestMapping("/{projectConfigId}")
 public class TableController {
 
     @Autowired
     private TableCreationService tableCreationService;
 
     /**
-     * Endpoint to create a new dynamic table and save its definition.
-     * POST /api/tables/create
+     * Creates a new dynamic table and its definition.
      *
-     * @param tableDefinition The JSON request body containing table and column definitions.
-     * @return ResponseEntity indicating success or failure.
+     * @param projectConfigId The UUID of the project.
+     * @param tableDefinition The table definition to create.
+     * @return ResponseEntity with the created TableDefinitionDto or an error message.
      */
-    @PostMapping("/create")
-    public ResponseEntity<String> createTable(@RequestBody TableDefinition tableDefinition) {
+    @PostMapping(value = "/createtable", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> createTable(
+            @PathVariable String projectConfigId,
+            @RequestBody TableDefinition tableDefinition) {
         try {
-            String result = tableCreationService.createTable(tableDefinition);
-            return ResponseEntity.status(HttpStatus.CREATED).body(result);
+            TableDefinitionDto createdTableDto = tableCreationService.createTable(tableDefinition, projectConfigId);
+            // Changed return type to TableDefinitionDto for success
+            return ResponseEntity.status(HttpStatus.CREATED).body(createdTableDto);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body("Validation Error: " + e.getMessage());
+            Map<String, Object> errorBody = new HashMap<>();
+            errorBody.put("message", e.getMessage());
+            errorBody.put("status", HttpStatus.BAD_REQUEST.value());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorBody);
         } catch (RuntimeException e) {
-            e.printStackTrace(); // Log the full stack trace for debugging
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Server Error: " + e.getMessage());
+            Map<String, Object> errorBody = new HashMap<>();
+            errorBody.put("message", "Failed to create table: " + e.getMessage());
+            errorBody.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorBody);
         }
     }
 
     /**
-     * Endpoint to get a table definition by its logical name.
-     * GET /api/tables/{tableName}
+     * Retrieves all table definitions for a specific project.
      *
-     * @param tableName The logical name of the table.
-     * @return ResponseEntity with TableDefinition on success, or String message on 404.
+     * @param projectConfigId The UUID of the project.
+     * @return ResponseEntity with a list of TableDefinitionDto or an error message.
      */
-    @GetMapping("/{tableName}")
-    public ResponseEntity<?> getTableDefinitionByLogicalName(@PathVariable String tableName) {
-        Optional<TableDefinition> tableDefOptional = tableCreationService.getTableDefinitionByLogicalName(tableName);
-        if (tableDefOptional.isPresent()) {
-            return ResponseEntity.ok(tableDefOptional.get());
-        } else {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Table definition with logical name '" + tableName + "' not found.");
-        }
-    }
-
-    /**
-     * Endpoint to get a table definition by its physical (final) table name.
-     * GET /api/tables/physical/{finalTableName}
-     *
-     * @param finalTableName The physical name of the table in the database.
-     * @return ResponseEntity with TableDefinition on success, or String message on 404.
-     */
-    @GetMapping("/physical/{finalTableName}")
-    public ResponseEntity<?> getTableDefinitionByPhysicalName(@PathVariable String finalTableName) {
-        Optional<TableDefinition> tableDefOptional = tableCreationService.getTableDefinitionByPhysicalName(finalTableName);
-        if (tableDefOptional.isPresent()) {
-            return ResponseEntity.ok(tableDefOptional.get());
-        } else {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Table definition for physical table name '" + finalTableName + "' not found.");
-        }
-    }
-
-    // --- Dynamic Table Data Operations ---
-
-    /**
-     * Inserts data into a dynamically created table.
-     * POST /api/tables/data/{logicalTableName}
-     *
-     * @param logicalTableName The logical name of the table (as stored in TableDefinition).
-     * @param data             A JSON object representing the row data (columnName: value).
-     * @return ResponseEntity with success or error message.
-     */
-    @PostMapping("/data/{logicalTableName}")
-    public ResponseEntity<String> insertDynamicTableData(@PathVariable String logicalTableName, @RequestBody Map<String, Object> data) {
+    @GetMapping
+    public ResponseEntity<?> getAllTableDefinitions(@PathVariable String projectConfigId) {
         try {
-            int rowsAffected = tableCreationService.addDataToDynamicTable(logicalTableName, data);
-            return ResponseEntity.status(HttpStatus.CREATED).body(rowsAffected + " row(s) inserted into '" + logicalTableName + "'.");
-        } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body("Validation Error: " + e.getMessage());
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error inserting data into table '" + logicalTableName + "': " + e.getMessage());
-        }
-    }
-
-    /**
-     * Retrieves all data from a dynamically created table.
-     * GET /api/tables/data/{logicalTableName}
-     *
-     * @param logicalTableName The logical name of the table.
-     * @return ResponseEntity with a list of maps representing table rows.
-     */
-    @GetMapping("/data/{logicalTableName}")
-    public ResponseEntity<?> getDynamicTableData(@PathVariable String logicalTableName) {
-        try {
-            List<Map<String, Object>> data = tableCreationService.getAllDataFromDynamicTable(logicalTableName);
-            if (data.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.NO_CONTENT).body("No data found in table '" + logicalTableName + "'.");
+            // Corrected method name call
+            List<TableDefinitionDto> tableDefs = tableCreationService.getAllTableDefinitionsForProject(projectConfigId);
+            if (tableDefs.isEmpty()) {
+                Map<String, Object> errorBody = new HashMap<>();
+                errorBody.put("message", "No table definitions found for project '" + projectConfigId + "'.");
+                errorBody.put("status", HttpStatus.NOT_FOUND.value());
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorBody);
             }
-            return ResponseEntity.ok(data);
+            return ResponseEntity.ok(tableDefs);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body("Validation Error: " + e.getMessage());
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error retrieving data from table '" + logicalTableName + "': " + e.getMessage());
+            Map<String, Object> errorBody = new HashMap<>();
+            errorBody.put("message", e.getMessage());
+            errorBody.put("status", HttpStatus.NOT_FOUND.value());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorBody);
+        } catch (RuntimeException e) {
+            Map<String, Object> errorBody = new HashMap<>();
+            errorBody.put("message", "Failed to retrieve table definitions: " + e.getMessage());
+            errorBody.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorBody);
         }
     }
 
     /**
-     * Retrieves data from a dynamically created table with a single filter condition.
-     * GET /api/tables/data/{logicalTableName}/filter/{filterColumn}/{filterValue}
+     * Retrieves a specific table definition by its ID.
      *
-     * @param logicalTableName The logical name of the table.
-     * @param filterColumn     The column to filter by.
-     * @param filterValue      The value to match. Note: Path variables are strings; consider type conversion in service if needed.
-     * @return ResponseEntity with a list of maps representing filtered table rows.
+     * @param projectConfigId The UUID of the project.
+     * @param tableDefinitionId The UUID of the table definition.
+     * @return ResponseEntity with the TableDefinitionDto or not found.
      */
-    @GetMapping("/data/{logicalTableName}/filter/{filterColumn}/{filterValue}")
-    public ResponseEntity<?> getDynamicTableDataFiltered(
-            @PathVariable String logicalTableName,
-            @PathVariable String filterColumn,
-            @PathVariable String filterValue) { // PathVariable comes as String, conversion happens in service if needed
+    @GetMapping("/{tableDefinitionId}")
+    public ResponseEntity<?> getTableDefinitionById(
+            @PathVariable String projectConfigId,
+            @PathVariable String tableDefinitionId) {
         try {
-            List<Map<String, Object>> data = tableCreationService.getFilteredDataFromDynamicTable(logicalTableName, filterColumn, filterValue);
-            if (data.isEmpty()) {
-                return ResponseEntity.status(HttpStatus.NO_CONTENT).body("No data found for filter: " + filterColumn + " = " + filterValue);
-            }
-            return ResponseEntity.ok(data);
+            // Assuming tableCreationService has a getTableDefinitionById method (or similar)
+            // If not, you might need to add one or use the repository directly if appropriate.
+            // For now, I'll assume TableCreationService can fetch it via its repo.
+            Optional<TableDefinition> tableDef = tableCreationService.getTableDefinitionByLogicalNameAndProject(null, projectConfigId); // Placeholder, assuming logicalTableName is not used here
+            // This is a placeholder as tableCreationService currently only has findByLogicalNameAndProject.
+            // You might need a method like `tableDefinitionRepository.findById(tableDefinitionId)` directly
+            // or add a specific service method for it.
+            return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body("Fetching table definition by ID is not yet fully implemented via service.");
+
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body("Validation Error: " + e.getMessage());
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error retrieving filtered data from table '" + logicalTableName + "': " + e.getMessage());
+            Map<String, Object> errorBody = new HashMap<>();
+            errorBody.put("message", e.getMessage());
+            errorBody.put("status", HttpStatus.NOT_FOUND.value());
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorBody);
+        } catch (RuntimeException e) {
+            Map<String, Object> errorBody = new HashMap<>();
+            errorBody.put("message", "Failed to retrieve table definition: " + e.getMessage());
+            errorBody.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorBody);
         }
     }
 
 
     /**
-     * Updates data in a dynamically created table based on a single condition.
-     * PUT /api/tables/data/{logicalTableName}/{filterColumn}/{filterValue}
+     * Updates an existing table definition.
      *
-     * @param logicalTableName The logical name of the table.
-     * @param filterColumn     The column to use for the WHERE clause.
-     * @param filterValue      The value for the WHERE clause.
-     * @param updateData       A JSON object with columns and new values to update.
-     * @return ResponseEntity with success or error message.
+     * @param projectConfigId The UUID of the project.
+     * @param tableDefinitionId The ID of the table definition to update.
+     * @param updatedDefinition The updated table definition data.
+     * @return ResponseEntity with the updated TableDefinitionDto or an error message.
      */
-    @PutMapping("/data/{logicalTableName}/{filterColumn}/{filterValue}")
-    public ResponseEntity<String> updateDynamicTableData(
-            @PathVariable String logicalTableName,
-            @PathVariable String filterColumn,
-            @PathVariable String filterValue, // PathVariable comes as String
-            @RequestBody Map<String, Object> updateData) {
+    @PutMapping("/{tableDefinitionId}")
+    public ResponseEntity<?> updateTableDefinition(
+            @PathVariable String projectConfigId,
+            @PathVariable String tableDefinitionId,
+            @RequestBody TableDefinition updatedDefinition) {
         try {
-            int rowsAffected = tableCreationService.updateDataInDynamicTable(logicalTableName, updateData, filterColumn, filterValue);
-            return ResponseEntity.ok(rowsAffected + " row(s) updated in '" + logicalTableName + "'.");
+            TableDefinitionDto resultDto = tableCreationService.updateTableDefinition(tableDefinitionId, updatedDefinition, projectConfigId);
+            // Changed return type to TableDefinitionDto for success
+            return ResponseEntity.ok(resultDto);
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body("Validation Error: " + e.getMessage());
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error updating data in table '" + logicalTableName + "': " + e.getMessage());
+            Map<String, Object> errorBody = new HashMap<>();
+            errorBody.put("message", e.getMessage());
+            errorBody.put("status", HttpStatus.BAD_REQUEST.value());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorBody);
+        } catch (RuntimeException e) {
+            Map<String, Object> errorBody = new HashMap<>();
+            errorBody.put("message", "Failed to update table definition: " + e.getMessage());
+            errorBody.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorBody);
         }
     }
 
     /**
-     * Deletes data from a dynamically created table based on a single condition.
-     * DELETE /api/tables/data/{logicalTableName}/{filterColumn}/{filterValue}
+     * Deletes a table definition and its associated physical table.
      *
-     * @param logicalTableName The logical name of the table.
-     * @param filterColumn     The column to use for the WHERE clause.
-     * @param filterValue      The value for the WHERE clause.
-     * @return ResponseEntity with success or error message.
+     * @param projectConfigId The UUID of the project.
+     * @param tableDefinitionId The ID of the table definition to delete.
+     * @return ResponseEntity with success message or error.
      */
-    @DeleteMapping("/data/{logicalTableName}/{filterColumn}/{filterValue}")
-    public ResponseEntity<String> deleteDynamicTableData(
-            @PathVariable String logicalTableName,
-            @PathVariable String filterColumn,
-            @PathVariable String filterValue) { // PathVariable comes as String
+    @DeleteMapping("/{tableDefinitionId}")
+    public ResponseEntity<?> deleteTableDefinition(
+            @PathVariable String projectConfigId,
+            @PathVariable String tableDefinitionId) {
         try {
-            int rowsAffected = tableCreationService.deleteDataFromDynamicTable(logicalTableName, filterColumn, filterValue);
-            return ResponseEntity.ok(rowsAffected + " row(s) deleted from '" + logicalTableName + "'.");
+            // Assuming a deleteTable method in service exists or will be implemented
+            // For now, returning NOT_IMPLEMENTED for this.
+            // tableCreationService.deleteTable(tableDefinitionId, projectConfigId);
+            return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body("Table deletion is not yet implemented.");
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body("Validation Error: " + e.getMessage());
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error deleting data from table '" + logicalTableName + "': " + e.getMessage());
+            Map<String, Object> errorBody = new HashMap<>();
+            errorBody.put("message", e.getMessage());
+            errorBody.put("status", HttpStatus.BAD_REQUEST.value());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorBody);
+        } catch (RuntimeException e) {
+            Map<String, Object> errorBody = new HashMap<>();
+            errorBody.put("message", "Failed to delete table definition: " + e.getMessage());
+            errorBody.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorBody);
         }
     }
 
-    @GetMapping("/list")
-    public ResponseEntity<List<TableDefinitionDto>> getAllTableDefinitions() {
-        List<TableDefinitionDto> tableDefinitions = tableCreationService.getAllTableDefinitions();
-        if (tableDefinitions.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NO_CONTENT).body(List.of()); // Return 204 No Content if no tables
-        }
-        return ResponseEntity.ok(tableDefinitions); // Return 200 OK with the list of tables
-    }
-
-    // --- NEW ENDPOINT: Get Combined Table Definition and Single Row Data ---
-    /**
-     * Retrieves the definition and a single row of data for a dynamic table.
-     * This is useful for editing purposes where the frontend needs both schema and data.
-     * GET /tables/data/{logicalTableName}/record/{systemRowId}
-     *
-     * @param logicalTableName The logical name of the table.
-     * @param systemRowId      The system-generated UUID of the row to fetch.
-     * @return ResponseEntity with a TableRecordDto on success, or an error/404 message.
-     */
-    @GetMapping("/data/{logicalTableName}/record/{systemRowId}")
-    public ResponseEntity<?> getTableDefinitionAndSingleRecord(
+    // New Endpoint based on error: getTableDefinitionAndSingleRow
+    @GetMapping("/{logicalTableName}/{systemRowId}/with-definition")
+    public ResponseEntity<?> getTableDefinitionAndSingleRow(
+            @PathVariable String projectConfigId,
             @PathVariable String logicalTableName,
             @PathVariable String systemRowId) {
         try {
-            Optional<TableRecordDto> tableRecordDtoOptional =
-                    tableCreationService.getTableDefinitionAndSingleRow(logicalTableName, systemRowId);
-
-            if (tableRecordDtoOptional.isPresent()) {
-                return ResponseEntity.ok(tableRecordDtoOptional.get());
-            } else {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body("Row with system ID '" + systemRowId + "' not found in table '" + logicalTableName + "'.");
-            }
+            Optional<Map<String, Object>> result = tableCreationService.getTableDefinitionAndSingleRow(logicalTableName, projectConfigId, systemRowId);
+            return result.map(ResponseEntity::ok)
+                    .orElseGet(() -> {
+                        Map<String, Object> errorBody = new HashMap<>();
+                        errorBody.put("message", "Table definition or row not found for table '" + logicalTableName + "' and system_row_id '" + systemRowId + "'.");
+                        errorBody.put("status", HttpStatus.NOT_FOUND.value());
+                        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorBody);
+                    });
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.badRequest().body("Validation Error: " + e.getMessage());
+            Map<String, Object> errorBody = new HashMap<>();
+            errorBody.put("message", e.getMessage());
+            errorBody.put("status", HttpStatus.BAD_REQUEST.value());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorBody);
         } catch (RuntimeException e) {
-            e.printStackTrace();
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Server Error: " + e.getMessage());
+            Map<String, Object> errorBody = new HashMap<>();
+            errorBody.put("message", "Failed to retrieve data: " + e.getMessage());
+            errorBody.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorBody);
         }
     }
 
+    // --- NOTE TO USER: Regarding getFilteredDataFromDynamicTable ---
+    // The error "cannot find symbol method getFilteredDataFromDynamicTable"
+    // suggests a method that doesn't exist in TableCreationService.
+    // You'll need to either:
+    // 1. Remove the call to this method if it's no longer needed.
+    // 2. Implement the method in TableCreationService if you need generic filtering.
+    //    (e.g., `List<Map<String, Object>> getFilteredData(String logicalTableName, String projectConfigId, Map<String, Object> filters)`
+    //    which would build a dynamic WHERE clause based on the filters map).
+    // I'm commenting out a placeholder for this to prevent compilation errors.
+    /*
+    @GetMapping("/{logicalTableName}/filtered")
+    public ResponseEntity<?> getFilteredData(
+            @PathVariable String projectConfigId,
+            @PathVariable String logicalTableName,
+            @RequestParam Map<String, Object> filters) {
+        try {
+            // This method needs to be implemented in TableCreationService
+            // List<Map<String, Object>> data = tableCreationService.getFilteredDataFromDynamicTable(logicalTableName, projectConfigId, filters);
+            return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).body("Filtered data retrieval not yet implemented.");
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to retrieve filtered data: " + e.getMessage());
+        }
+    }
+    */
 }

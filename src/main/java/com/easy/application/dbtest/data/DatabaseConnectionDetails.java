@@ -1,15 +1,18 @@
 package com.easy.application.dbtest.data;
 
-import jakarta.persistence.Column; // Make sure to import from jakarta.persistence
+import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist; // Import PrePersist
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
-import lombok.NoArgsConstructor; // Add this for JPA
-import lombok.AllArgsConstructor; // Add this for convenience
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+
+import java.util.UUID; // Import UUID
 
 @Entity // Marks this class as a JPA entity
 @Table(name = "database_connections") // Defines the table name
@@ -19,8 +22,12 @@ import lombok.AllArgsConstructor; // Add this for convenience
 public class DatabaseConnectionDetails {
 
     @Id // Marks this as the primary key
-    @GeneratedValue(strategy = GenerationType.IDENTITY) // Auto-incrementing ID
-    private Long id; // Unique identifier for each saved connection
+    @GeneratedValue(strategy = GenerationType.IDENTITY) // Auto-incrementing ID remains
+    private Long id; // Internal unique identifier for each saved connection
+
+    // --- NEW UUID COLUMN ---
+    @Column(name = "uuid", unique = true, nullable = false, length = 36) // UUIDs are 36 chars
+    private String uuid; // External unique identifier
 
     @NotBlank
     @Column(name = "db_type") // Explicit column name
@@ -46,4 +53,12 @@ public class DatabaseConnectionDetails {
     @NotBlank
     @Column(name = "db_password")
     private String dbPassword;
+
+    // --- New Method to Generate UUID ---
+    @PrePersist // This method runs before a new entity is persisted (saved for the first time)
+    public void generateUuid() {
+        if (this.uuid == null) { // Only generate if UUID is not already set
+            this.uuid = UUID.randomUUID().toString();
+        }
+    }
 }
