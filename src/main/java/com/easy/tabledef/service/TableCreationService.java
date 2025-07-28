@@ -5,6 +5,8 @@ import com.easy.application.dbtest.service.DatabaseConnectivityService;
 import com.easy.database.DynamicDataSourceManager;
 import com.easy.projectconfig.model.ProjectConfig;
 import com.easy.projectconfig.service.ProjectConfigService;
+import com.easy.tabledef.dto.ColumnDefinitionDto;
+import com.easy.tabledef.dto.TableDataResponseDto;
 import com.easy.tabledef.dto.TableDefinitionDto;
 import com.easy.tabledef.model.ColumnDefinition;
 import com.easy.tabledef.model.TableDefinition;
@@ -316,28 +318,7 @@ public class TableCreationService {
         return dynamicTableAccessor.insert(jdbcTemplate, tableDef.getFinalTableName(), data);
     }
 
-    /**
-     * Retrieves all rows from a dynamic table and optionally resolves references.
-     *
-     * @param logicalTableName The logical name of the table.
-     * @param projectConfigId The UUID of the project.
-     * @return A list of maps, where each map represents a row, potentially with resolved display values.
-     */
-    @Transactional(readOnly = true)
-    public List<Map<String, Object>> getAllDataFromDynamicTable(String logicalTableName, String projectConfigId) {
-        JdbcTemplate jdbcTemplate = getJdbcTemplateForProject(projectConfigId);
-        TableDefinition tableDef = getTableDefinitionByLogicalNameAndProject(logicalTableName, projectConfigId)
-                .orElseThrow(() -> new IllegalArgumentException("Table definition not found for logical name: " + logicalTableName + " in project: " + projectConfigId));
 
-        String finalTableName = tableDef.getFinalTableName();
-        String sql = "SELECT * FROM `" + finalTableName + "`"; // Quote table name
-
-        List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql);
-
-        return rows.stream()
-                .map(row -> processReferencesInRow(row, tableDef, projectConfigId))
-                .collect(Collectors.toList());
-    }
 
     /**
      * Retrieves a single row by its system_row_id from a dynamic table and optionally resolves references.
@@ -574,11 +555,6 @@ public class TableCreationService {
         return dynamicDataSourceManager.getJdbcTemplate(dbDetails);
     }
 
-    @Transactional(readOnly = true)
-    public Optional<TableDefinition> getTableDefinitionByLogicalNameAndProject(String logicalTableName, String projectConfigId) {
-        return tableDefinitionRepository.findByTableNameAndProjectConfigIdRef(logicalTableName, projectConfigId);
-    }
-
     private String mapColumnTypeToSql(String columnType) {
         return switch (columnType.toLowerCase()) {
             case "varchar", "string" -> "VARCHAR(255)";
@@ -593,5 +569,98 @@ public class TableCreationService {
             case "reference" -> "VARCHAR(36)";
             default -> throw new IllegalArgumentException("Unsupported column type: " + columnType);
         };
+    }
+
+
+    /**
+     * Retrieves a specific TableDefinition by its ID and ensures it belongs to the given project.
+     *
+     * @param tableDefinitionId The UUID of the TableDefinition.
+     * @param projectConfigId The UUID of the project to which the table must belong.
+     * @return An Optional containing the TableDefinitionDto if found and belongs to the project, otherwise empty.
+     */
+    @Transactional(readOnly = true)
+    public Optional<TableDefinitionDto> getTableDefinitionByIdAndProject(String tableDefinitionId, String projectConfigId) {
+        return tableDefinitionRepository.findById(tableDefinitionId)
+                .filter(td -> td.getProjectConfigIdRef().equals(projectConfigId))
+                .map(TableDefinitionDto::fromEntity);
+    }
+
+    /**
+     * Helper method to get TableDefinition by logical name and project ID.
+     * Use this if you need to fetch by logical name, not by UUID.
+     *
+     * @param logicalTableName The logical name of the table.
+     * @param projectConfigId The UUID of the project.
+     * @return Optional of TableDefinition.
+     */
+    @Transactional(readOnly = true)
+    public Optional<TableDefinition> getTableDefinitionByLogicalNameAndProject(String logicalTableName, String projectConfigId) {
+        return tableDefinitionRepository.findByTableNameAndProjectConfigIdRef(logicalTableName, projectConfigId);
+    }
+
+    /**
+     * Retrieves all data rows from a dynamic table along with its column definitions.
+     *
+     * @param logicalTableName The logical name of the table.
+     * @param projectConfigId The UUID of the project configuration.
+     * @return A TableDataResponseDto containing column definitions and all rows of data.
+     * @throws IllegalArgumentException if the table definition is not found for the given project.
+     */
+    @Transactional(readOnly = true)
+    public TableDataResponseDto getCombinedTableData(String logicalTableName, String projectConfigId) {
+        // 1. Get the TableDefinition (which includes ColumnDefinitions)
+        TableDefinition tableDef = getTableDefinitionByLogicalNameAndProject(logicalTableName, projectConfigId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Table definition '" + logicalTableName + "' not found for project '" + projectConfigId + "'."));
+
+        // 2. Convert ColumnDefinition entities to DTOs
+        List<ColumnDefinitionDto> columnDefsDto = tableDef.getColumns().stream()
+                .map(ColumnDefinitionDto::fromEntity)
+                .collect(Collectors.toList());
+
+        // 3. Get all data from the dynamic table
+        List<Map<String, Object>> rowData = getAllDataFromDynamicTable(logicalTableName, projectConfigId);
+
+        // 4. Build the combined response DTO
+        return TableDataResponseDto.builder()
+                .columnDefinitions(columnDefsDto)
+                .rowData(rowData)
+                .build();
+    }
+
+    /**
+     * Fetches all data from a dynamically created table.
+     * This method is called internally by getCombinedTableData.
+     *
+     * @param logicalTableName The logical name of the table.
+     * @param projectConfigId The ID of the project configuration.
+     * @return A list of maps, where each map represents a row.
+     * @throws IllegalArgumentException if the table definition is not found or database connection fails.
+     */
+    // This method already exists, just ensuring its visibility for context.
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getAllDataFromDynamicTable(String logicalTableName, String projectConfigId) {
+        ProjectConfig projectConfig = projectConfigService.getProjectConfigById(projectConfigId)
+                .orElseThrow(() -> new IllegalArgumentException("Project configuration not found with ID: " + projectConfigId));
+
+        TableDefinition tableDefinition = tableDefinitionRepository.findByTableNameAndProjectConfigIdRef(logicalTableName, projectConfigId)
+                .orElseThrow(() -> new IllegalArgumentException("Table definition '" + logicalTableName + "' not found for project '" + projectConfigId + "'."));
+
+        DatabaseConnectionDetails dbDetails = databaseConnectivityService.getDatabaseConnectionDetails(projectConfig.getDatabaseConnectionIdRef())
+                .orElseThrow(() -> new IllegalArgumentException("Database connection details not found for ID: " + projectConfig.getDatabaseConnectionIdRef()));
+
+        try {
+            JdbcTemplate jdbcTemplate = dynamicDataSourceManager.getJdbcTemplate(dbDetails);
+            // Assuming getFinalTableName() works
+            String sql = "SELECT * FROM " + tableDefinition.getFinalTableName();
+            List<Map<String, Object>> rawRows = jdbcTemplate.queryForList(sql);
+
+            // Resolve references if any
+            return dynamicTableAccessor.resolveReferenceColumns(jdbcTemplate,tableDefinition, rawRows);
+
+        } catch (Exception e) {
+            throw new RuntimeException("Error fetching all data from table '" + logicalTableName + "': " + e.getMessage(), e);
+        }
     }
 }

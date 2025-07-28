@@ -2,6 +2,7 @@ package com.easy.application.dbtest.service;
 
 import com.easy.application.dbtest.data.DatabaseConnectionDetails;
 import com.easy.application.dbtest.repository.DatabaseConnectionRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,7 +18,10 @@ import java.util.Optional;
 @Service
 public class DatabaseConnectivityService {
 
+    @Autowired
     private final DatabaseConnectionRepository repository;
+
+
 
     public DatabaseConnectivityService(DatabaseConnectionRepository repository) {
         this.repository = repository;
@@ -127,4 +131,16 @@ public class DatabaseConnectivityService {
             default -> 0;
         };
     }
+
+    /**
+     * Retrieves database connection details by its ID.
+     * THIS IS THE MISSING METHOD.
+     * @param id The ID of the database connection details.
+     * @return An Optional containing the DatabaseConnectionDetails if found.
+     */
+    @Transactional(readOnly = true)
+    public Optional<DatabaseConnectionDetails> getDatabaseConnectionDetails(String id) {
+        return repository.findByUuid(id);
+    }
+
 }

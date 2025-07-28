@@ -1,5 +1,6 @@
 package com.easy.tabledef.controller;
 
+import com.easy.tabledef.dto.TableDataResponseDto;
 import com.easy.tabledef.dto.TableDefinitionDto;
 import com.easy.tabledef.model.TableDefinition;
 import com.easy.tabledef.service.TableCreationService;
@@ -228,4 +229,45 @@ public class TableController {
         }
     }
     */
+
+
+
+    /**
+     * Retrieves all rows from a specific dynamic database table along with its column definitions.
+     * GET /api/projects/{projectConfigId}/table-definitions/{logicalTableName}/data
+     *
+     * @param projectConfigId The UUID of the project.
+     * @param logicalTableName The logical name of the table whose data is to be retrieved.
+     * @return ResponseEntity with a TableDataResponseDto containing column definitions and all rows of data, or an error message.
+     */
+    @GetMapping("/{logicalTableName}/data")
+    public ResponseEntity<?> getCombinedTableData(
+            @PathVariable String projectConfigId,
+            @PathVariable String logicalTableName) {
+        try {
+            TableDataResponseDto responseDto = tableCreationService.getCombinedTableData(logicalTableName, projectConfigId);
+
+            // Check if rowData is empty, and provide a message if needed (though 200 OK with empty list is typical)
+            if (responseDto.getRowData().isEmpty()) {
+                // You can choose to return 200 OK with an empty data array and a message,
+                // or keep it just as the DTO directly.
+                // The current DTO structure allows an empty rowData list naturally.
+                // For a more explicit message on empty data, you might structure the response differently.
+                // Sticking to returning the DTO as is for simplicity, client can check rowData.isEmpty().
+                return ResponseEntity.ok(responseDto);
+            }
+
+            return ResponseEntity.ok(responseDto);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> errorBody = new HashMap<>();
+            errorBody.put("message", e.getMessage());
+            errorBody.put("status", HttpStatus.BAD_REQUEST.value());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorBody);
+        } catch (RuntimeException e) {
+            Map<String, Object> errorBody = new HashMap<>();
+            errorBody.put("message", "Failed to retrieve combined table data: " + e.getMessage());
+            errorBody.put("status", HttpStatus.INTERNAL_SERVER_ERROR.value());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorBody);
+        }
+    }
 }
