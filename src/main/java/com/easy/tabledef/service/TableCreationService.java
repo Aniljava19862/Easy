@@ -567,6 +567,8 @@ public class TableCreationService {
             case "decimal", "double" -> "DECIMAL(10, 2)";
             case "uuid" -> "VARCHAR(36)";
             case "reference" -> "VARCHAR(36)";
+            case "email" -> "VARCHAR(36)";
+            case "password" -> "VARCHAR(36)";
             default -> throw new IllegalArgumentException("Unsupported column type: " + columnType);
         };
     }
